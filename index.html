@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>卦象之盘</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            background-color: white;
+        }
+        td {
+            width: 15vmin;
+            height: 15vmin;
+            max-width: 80px;
+            max-height: 80px;
+            border: 2px solid #333;
+            text-align: center;
+            font-size: 3vmin;
+            font-family: Arial, sans-serif;
+            cursor: pointer;
+            transition: all.3s;
+        }
+        td.selected {
+            background-color: #ffeb3b;
+            transform: scale(0.95);
+        }
+        .status {
+            margin: 20px 0;
+            font-family: Arial, sans-serif;
+            font-size: 2vmin;
+            padding: 10px 20px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        @media (max-width: 600px) {
+            td {
+                font-size: 6vw;
+            }
+            .status {
+                font-size: 4vw;
+            }
+        }
+    </style>
+</head>
+<body>
+    <table id="grid"></table>
+    <div class="status" id="status">点击两个格子进行交换</div>
+
+    <script>
+        // 定义八卦的三爻组合（上中下顺序）
+        const guaList = [
+            ['⚋', '⚋', '⚊'], // 震
+            ['⚋', '⚊', '⚋'], // 坎
+            ['⚊', '⚋', '⚋'], // 艮
+            ['⚊', '⚊', '⚋'], // 巽
+            ['⚊', '⚋', '⚊'], // 离
+            ['⚋', '⚊', '⚊'], // 兑
+            ['⚊', '⚊', '⚊'], // 乾
+            ['⚋', '⚋', '⚋']  // 坤
+        ];
+
+        let selectedCells = [];
+        let solution;
+
+        // 检查两个卦是否兼容
+        function isCompatible(g1, g2) {
+            let count = 0;
+            for (let i = 0; i < 3; i++) {
+                if (g1[i] === g2[i]) count++;
+            }
+            return count === 1;
+        }
+
+        // 生成符合条件的网格
+        function generateValidGrid() {
+            let grid;
+            do {
+                grid = [];
+                for (let row = 0; row < 4; row++) {
+                    grid[row] = [];
+                    for (let col = 0; col < 4; col++) {
+                        let candidates = guaList.filter(g => {
+                            if (col > 0 && !isCompatible(g, grid[row][col-1])) return false;
+                            if (row > 0 && !isCompatible(g, grid[row-1][col])) return false;
+                            return true;
+                        });
+                        
+                        if (candidates.length === 0) break;
+                        grid[row][col] = candidates[Math.random() * candidates.length | 0];
+                    }
+                    if (grid[row].length < 4) break;
+                }
+            } while (grid.flat().length !== 16);
+            return grid;
+        }
+
+        // 生成随机排列
+        function generatePermutation() {
+            const arr = Array.from({length:16}, (_, i) => i);
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // 打乱盘面
+        function shuffleGrid(grid) {
+            let flat = grid.flat();
+            
+            // 应用5次排列打乱
+            for (let n = 0; n < 5; n++) {
+                const perm = generatePermutation();
+                const newFlat = new Array(16);
+                for (let i = 0; i < 16; i++) {
+                    newFlat[i] = flat[perm[i]];
+                }
+                flat = newFlat;
+            }
+
+            // 重建二维数组
+            const shuffled = [];
+            for (let i = 0; i < 4; i++) {
+                shuffled.push(flat.slice(i*4, (i+1)*4));
+            }
+            return shuffled;
+        }
+
+        // 渲染网格
+        function renderGrid(grid) {
+            const table = document.getElementById('grid');
+            table.innerHTML = '';
+            
+            grid.forEach((row, rowIndex) => {
+                const tr = document.createElement('tr');
+                row.forEach((cell, colIndex) => {
+                    const td = document.createElement('td');
+                    td.textContent = cell.join('');
+                    td.dataset.row = rowIndex;
+                    td.dataset.col = colIndex;
+                    td.addEventListener('click', handleCellClick);
+                    tr.appendChild(td);
+                });
+                table.appendChild(tr);
+            });
+        }
+
+        // 处理格子点击
+        function handleCellClick(e) {
+            const td = e.target;
+            const row = parseInt(td.dataset.row);
+            const col = parseInt(td.dataset.col);
+            
+            // 切换选中状态
+            td.classList.toggle('selected');
+            selectedCells.push({row, col});
+            
+            if (selectedCells.length === 2) {
+                // 执行交换
+                const [first, second] = selectedCells;
+                const currentGrid = getCurrentGrid();
+                [currentGrid[first.row][first.col], currentGrid[second.row][second.col]] = 
+                    [currentGrid[second.row][second.col], currentGrid[first.row][first.col]];
+                
+                renderGrid(currentGrid);
+                checkWin(currentGrid);
+                selectedCells = [];
+            }
+        }
+
+        // 获取当前盘面状态
+        function getCurrentGrid() {
+            const grid = [];
+            const rows = document.querySelectorAll('#grid tr');
+            rows.forEach(tr => {
+                const row = [];
+                tr.querySelectorAll('td').forEach(td => {
+                    row.push(td.textContent.split(''));
+                });
+                grid.push(row);
+            });
+            return grid;
+        }
+
+        // 检查胜利条件
+        function checkWin(grid) {
+            for (let row = 0; row < 4; row++) {
+                for (let col = 0; col < 4; col++) {
+                    // 检查右边邻居
+                    if (col < 3 && !isCompatible(grid[row][col], grid[row][col+1])) return false;
+                    // 检查下方邻居
+                    if (row < 3 && !isCompatible(grid[row][col], grid[row+1][col])) return false;
+                }
+            }
+            document.getElementById('status').textContent = '挑战成功！';
+            return true;
+        }
+
+        // 初始化游戏
+        function initGame() {
+            solution = generateValidGrid();
+            const shuffledGrid = shuffleGrid(solution);
+            renderGrid(shuffledGrid);
+            document.getElementById('status').textContent = '点击两个格子进行交换';
+        }
+
+        // 启动游戏
+        initGame();
+    </script>
+</body>
+</html>
